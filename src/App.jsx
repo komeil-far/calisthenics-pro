@@ -22,7 +22,6 @@ import {
     Clock, Dumbbell, Zap, Target, CheckCircle, Repeat, Flame, Plus, Minus, Info, ArrowLeft,
     Home, User, BarChart2, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import jalali_moment from 'jalali-moment';
 import './App.css';
 
 // --- Farsi (Persian) Translations ---
@@ -83,9 +82,9 @@ const translations = {
   home: "خانه"
 };
 
-const persianMonths = [
-  "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", 
-  "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"
+const gregorianMonths = [
+  "January", "February", "March", "April", "May", "June", 
+  "July", "August", "September", "October", "November", "December"
 ];
 
 // --- Firebase Configuration ---
@@ -196,8 +195,8 @@ const AuthPage = () => {
     const [lastName, setLastName] = useState('');
     const [gender, setGender] = useState('male');
     const [birthDay, setBirthDay] = useState('1');
-    const [birthMonth, setBirthMonth] = useState('فروردین');
-    const [birthYear, setBirthYear] = useState('1380');
+    const [birthMonth, setBirthMonth] = useState('1');
+    const [birthYear, setBirthYear] = useState('2000');
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -276,8 +275,8 @@ const AuthPage = () => {
                             <label className="auth-label">{translations.dateOfBirth}</label>
                             <div className="dob-container">
                                 <select className="auth-select" value={birthDay} onChange={e => setBirthDay(e.target.value)}>{Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}</select>
-                                <select className="auth-select" value={birthMonth} onChange={e => setBirthMonth(e.target.value)}>{persianMonths.map(m => <option key={m} value={m}>{m}</option>)}</select>
-                                <select className="auth-select" value={birthYear} onChange={e => setBirthYear(e.target.value)}>{Array.from({length: 71}, (_, i) => 1403 - i).map(y => <option key={y} value={y}>{y}</option>)}</select>
+                                <select className="auth-select" value={birthMonth} onChange={e => setBirthMonth(e.target.value)}>{gregorianMonths.map((m, i) => <option key={m} value={i+1}>{m}</option>)}</select>
+                                <select className="auth-select" value={birthYear} onChange={e => setBirthYear(e.target.value)}>{Array.from({length: 71}, (_, i) => new Date().getFullYear() - 10 - i).map(y => <option key={y} value={y}>{y}</option>)}</select>
                             </div>
                         </>
                     )}
@@ -298,22 +297,21 @@ const AuthPage = () => {
 };
 
 const CalendarGrid = memo(({ completedDates, displayDate }) => {
-    const moment = jalali_moment(displayDate).locale('fa');
-    const month = moment.jMonth();
-    const year = moment.jYear();
+    const moment = new Date(displayDate);
+    const month = moment.getMonth();
+    const year = moment.getFullYear();
     
-    const daysInMonth = moment.jDaysInMonth();
-    const firstDayOfMonth = moment.startOf('jMonth').day(); // 0 (Sun) - 6 (Sat)
-    const jalaliFirstDay = (firstDayOfMonth + 1) % 7; // 0 (Sat) - 6 (Fri)
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDayOfMonth = new Date(year, month, 1).getDay(); // 0 (Sun) - 6 (Sat)
 
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-    const emptyDays = Array.from({ length: jalaliFirstDay });
+    const emptyDays = Array.from({ length: firstDayOfMonth });
 
     const completedDays = useMemo(() => new Set(
       completedDates
-        .map(d => jalali_moment(d))
-        .filter(d => d.jMonth() === month && d.jYear() === year)
-        .map(d => d.jDate())
+        .map(d => new Date(d))
+        .filter(d => d.getMonth() === month && d.getFullYear() === year)
+        .map(d => d.getDate())
     ), [completedDates, month, year]);
   
     return (
@@ -346,17 +344,16 @@ const ProfileScreen = ({ user, completedWorkouts, onLogout }) => {
     const streak = useMemo(() => calculateStreak(completedWorkouts.map(w => w.date)), [completedWorkouts]);
     const totalDays = useMemo(() => new Set(completedWorkouts.map(w => w.date.split('T')[0])).size, [completedWorkouts]);
 
-    const accountCreationMoment = useMemo(() => userData ? jalali_moment(userData.createdAt) : null, [userData]);
-    const displayMoment = jalali_moment(displayDate);
-
-    const canGoToPrev = accountCreationMoment ? displayMoment.clone().subtract(1, 'jMonth').isSameOrAfter(accountCreationMoment, 'jMonth') : false;
-    const canGoToNext = !displayMoment.isSame(new Date(), 'jMonth');
+    const accountCreationDate = useMemo(() => userData ? new Date(userData.createdAt) : null, [userData]);
+    
+    const canGoToPrev = accountCreationDate ? new Date(displayDate.getFullYear(), displayDate.getMonth() - 1, 1) >= new Date(accountCreationDate.getFullYear(), accountCreationDate.getMonth(), 1) : false;
+    const canGoToNext = new Date() > new Date(displayDate.getFullYear(), displayDate.getMonth() + 1, 1);
 
     const goToPrevMonth = () => {
-        if (canGoToPrev) setDisplayDate(displayMoment.clone().subtract(1, 'jMonth').toDate());
+        if (canGoToPrev) setDisplayDate(new Date(displayDate.setMonth(displayDate.getMonth() - 1)));
     };
     const goToNextMonth = () => {
-        if (canGoToNext) setDisplayDate(displayMoment.clone().add(1, 'jMonth').toDate());
+        if (canGoToNext) setDisplayDate(new Date(displayDate.setMonth(displayDate.getMonth() + 1)));
     };
     
     if (isLoading) {
@@ -388,7 +385,7 @@ const ProfileScreen = ({ user, completedWorkouts, onLogout }) => {
             <div className="calendar-container">
                 <div className="calendar-header">
                     <button onClick={goToPrevMonth} disabled={!canGoToPrev} className="calendar-nav-button"><ChevronRight /></button>
-                    <span className="calendar-title">{displayMoment.locale('fa').format('jMMMM jYYYY')}</span>
+                    <span className="calendar-title">{gregorianMonths[displayDate.getMonth()]} {displayDate.getFullYear()}</span>
                     <button onClick={goToNextMonth} disabled={!canGoToNext} className="calendar-nav-button"><ChevronLeft /></button>
                 </div>
                 <CalendarGrid completedDates={completedWorkouts.map(w => w.date)} displayDate={displayDate} />
@@ -515,7 +512,7 @@ const WorkoutScreen = ({ workoutId, onBack, userId }) => {
                 {workout.exercises.map((ex, index) => <ExerciseCard key={ex.name} exercise={ex} index={index} />)}
                 <Timer initialTime={90} />
                 <motion.div className="completion-section" variants={itemVariants}>
-                    <motion.button onClick={handleComplete} whileHover={{ scale: 1.05, boxShadow: "0px 0px 20px rgba(34, 211, 238, 0.5)" }} whileTap={{ scale: 0.98 }} className="main-action-button">{translations.markAsDone}</motion.button>
+                    <motion.button onClick={handleComplete} whileHover={{ scale: 1.05, boxShadow: "0px 0px 20px rgba(239, 68, 68, 0.5)" }} whileTap={{ scale: 0.98 }} className="main-action-button">{translations.markAsDone}</motion.button>
                 </motion.div>
             </motion.div>
         </motion.div>
@@ -607,6 +604,7 @@ export default function App() {
     }, [user]);
 
     const handleLogout = () => {
+        setPage('home');
         signOut(auth);
     };
 
