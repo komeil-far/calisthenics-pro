@@ -1,9 +1,28 @@
-import React, { useState, useEffect, useRef, memo } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, query } from 'firebase/firestore';
+import { 
+    getAuth, 
+    onAuthStateChanged, 
+    createUserWithEmailAndPassword, 
+    signInWithEmailAndPassword, 
+    signOut,
+    sendPasswordResetEmail
+} from 'firebase/auth';
+import { 
+    getFirestore, 
+    doc, 
+    setDoc, 
+    getDoc, 
+    collection, 
+    onSnapshot, 
+    query
+} from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, Dumbbell, Zap, Target, CheckCircle, Repeat, Flame, Plus, Minus, Info, ArrowLeft } from 'lucide-react';
+import { 
+    Clock, Dumbbell, Zap, Target, CheckCircle, Repeat, Flame, Plus, Minus, Info, ArrowLeft,
+    Home, User, BarChart2
+} from 'lucide-react';
+import './App.css';
 
 // --- Farsi (Persian) Translations ---
 const translations = {
@@ -20,7 +39,7 @@ const translations = {
   sets: "ست",
   reps: "تکرار",
   seconds: "ثانیه",
-  importantNotes: "نکات مهم",
+  importantNotes: "جزئیات حرکت",
   completed: "تکمیل شد!",
   markAsDone: "تکمیل و ثبت تمرین",
   backToHome: "بازگشت به خانه",
@@ -31,18 +50,53 @@ const translations = {
   greatJob: "کارت عالی بود!",
   sessionCompleted: "این جلسه تمرینی با موفقیت ثبت شد.",
   loading: "در حال آماده‌سازی برای قهرمان...",
+  login: "ورود",
+  signup: "ثبت نام",
+  logout: "خروج",
+  email: "ایمیل",
+  password: "رمز عبور",
+  firstName: "نام",
+  lastName: "نام خانوادگی",
+  gender: "جنسیت",
+  male: "مرد",
+  female: "زن",
+  other: "سایر",
+  dateOfBirth: "تاریخ تولد",
+  day: "روز",
+  month: "ماه",
+  year: "سال",
+  loginToYourAccount: "ورود به حساب کاربری",
+  dontHaveAccount: "حساب کاربری ندارید؟",
+  createAccount: "ساخت حساب",
+  alreadyHaveAccount: "قبلاً ثبت‌نام کرده‌اید؟",
+  forgotPassword: "رمز عبور را فراموش کرده‌اید؟",
+  resetPassword: "بازیابی رمز عبور",
+  sendResetLink: "ارسال لینک بازیابی",
+  resetLinkSent: "لینک بازیابی به ایمیل شما ارسال شد.",
+  profile: "پروفایل",
+  statistics: "آمار و ارقام",
+  workoutStreak: "روزهای متوالی تمرین",
+  totalWorkoutDays: "مجموع روزهای تمرین",
+  monthlyCalendar: "تقویم ماهانه",
+  days: "روز",
+  home: "خانه"
 };
+
+const persianMonths = [
+  "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", 
+  "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"
+];
 
 // --- Firebase Configuration ---
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAD10xYyEVKTOom871IOpOxBXOkgmBO4l0",
+  authDomain: "calisthenics-8968f.firebaseapp.com",
+  projectId: "calisthenics-8968f",
+  storageBucket: "calisthenics-8968f.appspot.com",
+  messagingSenderId: "408915705905",
+  appId: "1:408915705905:web:3b9e31a841ce268d4ed510",
+  measurementId: "G-2JFD403NN7"
 };
-const appId = 'calisthenics-pro-default';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -51,11 +105,56 @@ const db = getFirestore(app);
 
 // --- Workout Data ---
 const workoutData = {
-  push_A: { name: translations.pushA, icon: Flame, target: "سینه، سرشانه، پشت بازو (پایه‌ای)", exercises: [ { name: "شنا روی سطح شیبدار", sets: 3, reps: "12-15", notes: "برای گرم کردن و آماده‌سازی سینه و سرشانه عالی است." }, { name: "شنا سوئدی استاندارد", sets: 3, reps: "تا ناتوانی", notes: "فرم صحیح را حفظ کنید. بدن صاف مثل یک خط کش." }, { name: "شنا روی زانو", sets: 2, reps: "15", notes: "برای افزایش حجم تمرین و خسته کردن کامل عضلات." }, { name: "دیپ با نیمکت", sets: 3, reps: "10-12", notes: "تمرکز اصلی روی عضلات پشت بازو." }, { name: "شنا پایک", sets: 3, reps: "8-10", notes: "باسن را بالا نگه دارید تا فشار روی سرشانه متمرکز شود." }, { name: "پلانک به شنا", sets: 3, reps: "8 هر طرف", notes: "حرکتی عالی برای تقویت میان‌تنه و پایداری شانه." }, { name: "لمس شانه در حالت پلانک", sets: 3, time: 40, notes: "بدن را ثابت نگه دارید و از چرخش لگن جلوگیری کنید." }, { name: "کشش سینه", sets: 1, time: 30, notes: "در پایان تمرین برای ریکاوری بهتر عضلات سینه." }, ] },
-  push_B: { name: translations.pushB, icon: Flame, target: "سینه، سرشانه، پشت بازو (شدتی)", exercises: [ { name: "شنا دست باز", sets: 3, reps: "10-12", notes: "فشار بیشتر روی بخش خارجی عضلات سینه." }, { name: "شنا الماسی", sets: 3, reps: "تا ناتوانی", notes: "تمرکز حداکثری بر روی عضلات سه سر بازویی (پشت بازو)." }, { name: "شنا با شیب منفی", sets: 3, reps: "8-10", notes: "پاهایتان را روی سطح بلندتر قرار دهید. برای بخش بالایی سینه." }, { name: "شنا شبه پلانچ", sets: 3, reps: "6-8", notes: "دست‌ها را نزدیک کمر قرار دهید و به جلو خم شوید. حرکتی پیشرفته." }, { name: "نگه داشتن تعادل روی دست کنار دیوار", sets: 3, time: 30, notes: "برای تقویت قدرت و پایداری سرشانه." }, { name: "پشت بازو خوابیده روی زمین", sets: 3, reps: "12-15", notes: "با کنترل کامل حرکت را انجام دهید." }, { name: "شنا انفجاری", sets: 3, reps: "5-8", notes: "با تمام قدرت دست‌ها را از زمین جدا کنید." }, { name: "کشش پشت بازو", sets: 1, time: 30, notes: "در پایان تمرین برای ریکاوری بهتر." }, ] },
-  pull_A: { name: translations.pullA, icon: Repeat, target: "پشت، زیر بغل، جلو بازو (پایه‌ای)", exercises: [ { name: "بارفیکس استرالیایی", sets: 3, reps: "10-12", notes: "یک حرکت عالی برای ساختن قدرت پایه برای بارفیکس." }, { name: "بارفیکس پرشی با فاز منفی", sets: 3, reps: "6-8", notes: "بالا بپرید و به آرامی (۳ تا ۵ ثانیه) پایین بیایید." }, { name: "کشش کتف در حالت آویزان", sets: 3, reps: "10", notes: "فقط با استفاده از عضلات کتف، بدن را بالا و پایین ببرید." }, { name: "آویزان شدن فعال", sets: 3, time: 30, notes: "شانه‌ها را از گوش دور نگه دارید. برای سلامت شانه و قدرت گرفتن." }, { name: "سوپرمن", sets: 3, reps: "15", notes: "برای تقویت عضلات فیله کمر." }, { name: "روئینگ با حوله و در", sets: 3, reps: "12", notes: "یک حوله را دور دستگیره در بیاندازید و خود را به سمت در بکشید." }, { name: "پلانک معکوس", sets: 3, time: 30, notes: "برای تقویت زنجیره خلفی بدن (کمر، باسن، همسترینگ)." }, { name: "کشش زیربغل", sets: 1, time: 30, notes: "در پایان تمرین برای افزایش انعطاف." }, ] },
-  pull_B: { name: translations.pullB, icon: Repeat, target: "پشت، زیر بغل، جلو بازو (کششی)", exercises: [ { name: "چین آپ", sets: 3, reps: "تا ناتوانی", notes: "کف دست‌ها به سمت صورت. فشار بیشتر روی جلو بازو." }, { name: "بارفیکس دست باز", sets: 3, reps: "6-8", notes: "تمرکز بر روی عضلات پشتی بزرگ (زیر بغل)." }, { name: "نگه داشتن در بالای بارفیکس", sets: 3, time: 15, notes: "چانه بالای میله. برای افزایش قدرت استاتیک." }, { name: "بارفیکس با حوله", sets: 3, reps: "5", notes: "دو حوله از میله آویزان کنید و از آنها برای بارفیکس استفاده کنید. عالی برای قدرت پنجه." }, { name: "فیله کمر روی زمین", sets: 3, reps: "15", notes: "جایگزین مناسبی برای سوپرمن." }, { name: "جلو بازو با وزن بدن", sets: 3, reps: "10-12", notes: "از یک میز یا میله پایین برای انجام حرکت استفاده کنید." }, { name: "آویزان شدن از یک دست", sets: 3, time: "10 هر دست", notes: "برای به چالش کشیدن نهایی قدرت پنجه و زیربغل." }, { name: "کشش جلو بازو", sets: 1, time: 30, notes: "در پایان تمرین برای ریکاوری." }, ] },
-  legs: { name: translations.legs, icon: Zap, target: "پا، باسن، میان تنه", exercises: [ { name: "اسکات با وزن بدن", sets: 3, reps: "20", notes: "فرم صحیح حرکت را در اولویت قرار دهید." }, { name: "لانگز قدم‌رو", sets: 3, reps: "12 هر پا", notes: "گام‌های بلند و کنترل شده بردارید." }, { name: "پل باسن", sets: 3, reps: "20", notes: "در بالای حرکت، عضلات باسن را کاملا منقبض کنید." }, { name: "ساق پا ایستاده", sets: 4, reps: "25", notes: "برای دامنه حرکتی کامل، روی لبه پله بایستید." }, { name: "لانگز به بغل", sets: 3, reps: "10 هر طرف", notes: "برای تقویت عضلات داخلی و خارجی ران." }, { name: "اسکات پرشی", sets: 3, reps: "12", notes: "با تمام قدرت به سمت بالا بپرید و نرم فرود بیایید." }, { name: "صندلی روی دیوار", sets: 3, time: 45, notes: "ران‌ها باید موازی با زمین باشند." }, { name: "ددلیفت تک پا با وزن بدن", sets: 3, reps: "10 هر پا", notes: "برای تقویت تعادل و عضلات همسترینگ." }, ] },
+  push_A: { name: translations.pushA, icon: Flame, target: "سینه، سرشانه، پشت بازو (پایه‌ای)", exercises: [
+    { name: "شنا روی سطح شیبدار", englishName: "Incline Push-up", howTo: "دست‌ها را روی یک سطح بلندتر از پاها (مانند میز) قرار دهید و شنا بروید. این کار فشار را از روی سرشانه برداشته و به بخش پایینی سینه منتقل می‌کند.", sets: 3, reps: "12-15", notes: "برای گرم کردن عالی است." },
+    { name: "شنا سوئدی استاندارد", englishName: "Standard Push-up", howTo: "در حالت پلانک قرار بگیرید و با خم کردن آرنج‌ها، سینه را به زمین نزدیک کنید. بدن باید کاملاً صاف باشد.", sets: 3, reps: "تا ناتوانی", notes: "فرم صحیح را فدای تعداد نکنید." },
+    { name: "شنا روی زانو", englishName: "Knee Push-up", howTo: "مانند شنای استاندارد است، با این تفاوت که روی زانوها تکیه می‌کنید تا حرکت ساده‌تر شود.", sets: 2, reps: "15", notes: "برای افزایش حجم تمرین و خسته کردن کامل عضلات." },
+    { name: "دیپ با نیمکت", englishName: "Bench Dips", howTo: "پشت به یک نیمکت یا صندلی، دست‌ها را روی لبه آن قرار دهید و با خم کردن آرنج، بدن را پایین ببرید.", sets: 3, reps: "10-12", notes: "تمرکز اصلی روی عضلات پشت بازو است." },
+    { name: "شنا پایک", englishName: "Pike Push-up", howTo: "بدن را به شکل عدد هشت فارسی (^) درآورید و با خم کردن آرنج، سر را به زمین نزدیک کنید.", sets: 3, reps: "8-10", notes: "این حرکت سرشانه را به خوبی هدف قرار می‌دهد." },
+    { name: "پلانک به شنا", englishName: "Plank to Push-up", howTo: "از حالت پلانک روی ساعد، یک به یک دست‌ها را صاف کرده و به حالت شنا بروید و سپس برگردید.", sets: 3, reps: "8 هر طرف", notes: "حرکتی عالی برای تقویت میان‌تنه و پایداری شانه." },
+    { name: "لمس شانه در حالت پلانک", englishName: "Shoulder Taps", howTo: "در حالت شنا، به آرامی با یک دست شانه مخالف را لمس کنید. سعی کنید لگن ثابت بماند.", sets: 3, time: 40, notes: "بدن را ثابت نگه دارید و از چرخش لگن جلوگیری کنید." },
+    { name: "کشش سینه", englishName: "Chest Stretch", howTo: "در چارچوب در بایستید، دست‌ها را به طرفین باز کرده و به آرامی بدن را به جلو متمایل کنید.", sets: 1, time: 30, notes: "در پایان تمرین برای ریکاوری بهتر عضلات سینه." },
+  ]},
+  push_B: { name: translations.pushB, icon: Flame, target: "سینه، سرشانه، پشت بازو (شدتی)", exercises: [
+    { name: "شنا دست باز", englishName: "Wide Push-up", howTo: "دست‌ها را بیشتر از عرض شانه باز کنید. این کار فشار بیشتری به بخش خارجی عضلات سینه وارد می‌کند.", sets: 3, reps: "10-12", notes: "برای پهن‌تر کردن عضلات سینه." },
+    { name: "شنا الماسی", englishName: "Diamond Push-up", howTo: "انگشتان شست و اشاره را به هم بچسبانید تا شکل لوزی بسازند و شنا بروید. تمرکز حداکثری بر روی پشت بازو است.", sets: 3, reps: "تا ناتوانی", notes: "این حرکت برای پشت بازو بسیار چالش‌برانگیز است." },
+    { name: "شنا با شیب منفی", englishName: "Decline Push-up", howTo: "پاهایتان را روی یک سطح بلندتر قرار دهید. این کار بخش بالایی سینه و سرشانه را هدف قرار می‌دهد.", sets: 3, reps: "8-10", notes: "هرچه پاها بالاتر باشد، حرکت سخت‌تر می‌شود." },
+    { name: "شنا شبه پلانچ", englishName: "Pseudo Planche Push-up", howTo: "دست‌ها را نزدیک کمر قرار دهید و بدن را به جلو متمایل کنید تا سرشانه‌ها از مچ جلوتر بروند.", sets: 3, reps: "6-8", notes: "یک قدم مهم برای یادگیری حرکت پلانچ کامل." },
+    { name: "نگه داشتن تعادل روی دست", englishName: "Wall Handstand Hold", howTo: "پشت به دیوار، پاها را روی دیوار بالا ببرید تا در حالت ایستادن روی دست قرار بگیرید و نگه دارید.", sets: 3, time: 30, notes: "برای تقویت قدرت و پایداری سرشانه." },
+    { name: "پشت بازو خوابیده", englishName: "Floor Triceps Extension", howTo: "به پشت دراز بکشید، باسن را بلند کنید و با خم کردن آرنج‌ها، ساعد را به زمین نزدیک کنید.", sets: 3, reps: "12-15", notes: "با کنترل کامل حرکت را انجام دهید." },
+    { name: "شنا انفجاری", englishName: "Explosive Push-up", howTo: "با تمام قدرت به سمت بالا فشار دهید تا دست‌ها از زمین جدا شوند. می‌توانید بین فشار دست بزنید.", sets: 3, reps: "5-8", notes: "برای افزایش قدرت و توان انفجاری." },
+    { name: "کشش پشت بازو", englishName: "Triceps Stretch", howTo: "یک دست را از بالای سر خم کنید و با دست دیگر، آرنج را به آرامی به سمت پایین بکشید.", sets: 1, time: 30, notes: "در پایان تمرین برای ریکاوری بهتر." },
+  ]},
+  pull_A: { name: translations.pullA, icon: Repeat, target: "پشت، زیر بغل، جلو بازو (پایه‌ای)", exercises: [
+    { name: "بارفیکس استرالیایی", englishName: "Australian Pull-up", howTo: "زیر یک میله پایین (یا میز) قرار بگیرید و با بدنی صاف، سینه را به میله نزدیک کنید.", sets: 3, reps: "10-12", notes: "یک حرکت عالی برای ساختن قدرت پایه برای بارفیکس." },
+    { name: "بارفیکس با فاز منفی", englishName: "Negative Pull-up", howTo: "بالا بپرید تا چانه بالای میله باشد، سپس به آرامی (در ۳ تا ۵ ثانیه) خود را پایین بیاورید.", sets: 3, reps: "6-8", notes: "برای ساختن قدرت لازم برای بارفیکس کامل." },
+    { name: "کشش کتف", englishName: "Scapular Pulls", howTo: "از میله آویزان شوید و بدون خم کردن آرنج، فقط با استفاده از عضلات کتف، بدن را کمی بالا و پایین ببرید.", sets: 3, reps: "10", notes: "برای فعال‌سازی و سلامت عضلات پشت." },
+    { name: "آویزان شدن فعال", englishName: "Active Hang", howTo: "از میله آویزان شوید و شانه‌ها را فعالانه به سمت پایین فشار دهید (از گوش دور کنید) و نگه دارید.", sets: 3, time: 30, notes: "برای سلامت شانه و افزایش قدرت پنجه." },
+    { name: "سوپرمن", englishName: "Superman Lifts", howTo: "روی شکم دراز بکشید و همزمان دست‌ها و پاها را از زمین بلند کنید.", sets: 3, reps: "15", notes: "برای تقویت عضلات فیله کمر." },
+    { name: "روئینگ با حوله", englishName: "Towel Rows", howTo: "یک حوله را دور دستگیره در بیاندازید و با گرفتن دو سر حوله، خود را به سمت در بکشید.", sets: 3, reps: "12", notes: "یک جایگزین عالی برای حرکت روئینگ." },
+    { name: "پلانک معکوس", englishName: "Reverse Plank", howTo: "مانند حالت پل باسن شروع کنید اما دست‌ها و پاها را صاف کرده و بدن را در یک خط مستقیم نگه دارید.", sets: 3, time: 30, notes: "برای تقویت زنجیره خلفی بدن." },
+    { name: "کشش زیربغل", englishName: "Lat Stretch", howTo: "کنار دیوار بایستید، یک دست را به دیوار تکیه داده و به آرامی بچرخید تا کشش را در زیربغل حس کنید.", sets: 1, time: 30, notes: "در پایان تمرین برای افزایش انعطاف." },
+  ]},
+  pull_B: { name: translations.pullB, icon: Repeat, target: "پشت، زیر بغل، جلو بازو (کششی)", exercises: [
+    { name: "چین آپ", englishName: "Chin-up", howTo: "کف دست‌ها به سمت صورت باشد و خود را بالا بکشید. این حرکت فشار بیشتری به جلو بازو وارد می‌کند.", sets: 3, reps: "تا ناتوانی", notes: "اگر سخت است، از فاز منفی استفاده کنید." },
+    { name: "بارفیکس دست باز", englishName: "Wide Grip Pull-up", howTo: "دست‌ها را بیشتر از عرض شانه باز کرده و خود را بالا بکشید. تمرکز بر روی عضلات پشتی بزرگ (زیر بغل).", sets: 3, reps: "6-8", notes: "برای داشتن پشتی V شکل." },
+    { name: "نگه داشتن در بالای بارفیکس", englishName: "Isometric Hold", howTo: "خود را بالا بکشید و در بالاترین نقطه (چانه بالای میله) برای چند ثانیه نگه دارید.", sets: 3, time: 15, notes: "برای افزایش قدرت استاتیک و استقامت." },
+    { name: "بارفیکس با حوله", englishName: "Towel Pull-up", howTo: "دو حوله از میله آویزان کنید و با گرفتن آن‌ها بارفیکس بروید. این حرکت قدرت پنجه را به شدت افزایش می‌دهد.", sets: 3, reps: "5", notes: "بسیار چالش‌برانگیز برای ساعد و پنجه." },
+    { name: "فیله کمر روی زمین", englishName: "Back Extension on Floor", howTo: "روی شکم دراز بکشید و دست‌ها را کنار سر قرار دهید. بالاتنه را تا جای ممکن از زمین بلند کنید.", sets: 3, reps: "15", notes: "جایگزین مناسبی برای دستگاه فیله کمر." },
+    { name: "جلو بازو با وزن بدن", englishName: "Bodyweight Bicep Curl", howTo: "زیر یک میز یا میله پایین، بدن را با زاویه نگه داشته و با خم کردن آرنج، خود را بالا بکشید.", sets: 3, reps: "10-12", notes: "هرچه بدن افقی‌تر باشد، حرکت سخت‌تر است." },
+    { name: "آویزان شدن از یک دست", englishName: "One Arm Hang", howTo: "با تمام قدرت از یک دست از میله آویزان شوید و تا جای ممکن نگه دارید.", sets: 3, time: "10 هر دست", notes: "برای به چالش کشیدن نهایی قدرت پنجه." },
+    { name: "کشش جلو بازو", englishName: "Biceps Stretch", howTo: "دست را از پشت به دیوار تکیه دهید و به آرامی بدن را بچرخانید تا کشش را در جلو بازو حس کنید.", sets: 1, time: 30, notes: "در پایان تمرین برای ریکاوری." },
+  ]},
+  legs: { name: translations.legs, icon: Zap, target: "پا، باسن، میان تنه", exercises: [
+    { name: "اسکات با وزن بدن", englishName: "Bodyweight Squat", howTo: "بایستید و تصور کنید می‌خواهید روی یک صندلی بنشینید. کمر صاف و سینه رو به جلو باشد.", sets: 3, reps: "20", notes: "فرم صحیح حرکت را در اولویت قرار دهید." },
+    { name: "لانگز قدم‌رو", englishName: "Walking Lunges", howTo: "یک قدم بزرگ به جلو بردارید و هر دو زانو را تا زاویه ۹۰ درجه خم کنید. سپس با پای دیگر تکرار کنید.", sets: 3, reps: "12 هر پا", notes: "گام‌های بلند و کنترل شده بردارید." },
+    { name: "پل باسن", englishName: "Glute Bridge", howTo: "به پشت دراز بکشید، زانوها خم و کف پا روی زمین. باسن را تا جای ممکن بالا بیاورید و منقبض کنید.", sets: 3, reps: "20", notes: "در بالای حرکت، عضلات باسن را کاملا منقبض کنید." },
+    { name: "ساق پا ایستاده", englishName: "Calf Raise", howTo: "روی لبه یک پله بایستید و روی پنجه پا بلند شوید، سپس به آرامی پایین بیایید.", sets: 4, reps: "25", notes: "برای دامنه حرکتی کامل، روی لبه پله بایستید." },
+    { name: "لانگز به بغل", englishName: "Side Lunge", howTo: "یک قدم بزرگ به بغل بردارید و روی آن پا بنشینید، در حالی که پای دیگر صاف است.", sets: 3, reps: "10 هر طرف", notes: "برای تقویت عضلات داخلی و خارجی ران." },
+    { name: "اسکات پرشی", englishName: "Jump Squat", howTo: "یک اسکات کامل بزنید و در مسیر بالا آمدن، با تمام قدرت به سمت بالا بپرید و نرم فرود بیایید.", sets: 3, reps: "12", notes: "برای افزایش توان انفجاری پاها." },
+    { name: "صندلی روی دیوار", englishName: "Wall Sit", howTo: "پشت به دیوار، در حالت اسکات (ران‌ها موازی زمین) تکیه دهید و در همان حالت بمانید.", sets: 3, time: 45, notes: "این حرکت استقامت عضلات چهارسر را به چالش می‌کشد." },
+    { name: "ددلیفت تک پا", englishName: "Single Leg RDL", howTo: "روی یک پا بایستید، بالاتنه را به جلو خم کنید و همزمان پای دیگر را به عقب ببرید تا بدن موازی زمین شود.", sets: 3, reps: "10 هر پا", notes: "برای تقویت تعادل و عضلات همسترینگ." },
+  ]},
 };
 const weeklySchedule = ['push_A', 'pull_A', 'legs', 'rest', 'push_B', 'pull_B', 'rest'];
 
@@ -63,7 +162,203 @@ const weeklySchedule = ['push_A', 'pull_A', 'legs', 'rest', 'push_B', 'pull_B', 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } }};
 const itemVariants = { hidden: { y: 20, opacity: 0 }, visible: { y: 0, opacity: 1, transition: { type: 'spring', stiffness: 100 } }};
 
-// --- Memoized Components for Performance ---
+// --- Helper Functions ---
+const calculateStreak = (dates) => {
+    if (dates.length === 0) return 0;
+    const sortedDates = [...new Set(dates.map(d => d.split('T')[0]))].sort();
+    let currentStreak = 0;
+    if (sortedDates.length > 0) {
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const lastWorkoutDate = new Date(sortedDates[sortedDates.length - 1]); lastWorkoutDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.ceil((today - lastWorkoutDate) / (1000 * 60 * 60 * 24));
+        if (diffDays > 1) return 0;
+        currentStreak = 1;
+    }
+    for (let i = sortedDates.length - 1; i > 0; i--) {
+        const d1 = new Date(sortedDates[i]);
+        const d2 = new Date(sortedDates[i - 1]);
+        d1.setHours(0, 0, 0, 0);
+        d2.setHours(0, 0, 0, 0);
+        const diff = (d1 - d2) / (1000 * 60 * 60 * 24);
+        if (diff === 1) currentStreak++;
+        else break;
+    }
+    return currentStreak;
+};
+
+// --- Components ---
+const AuthPage = () => {
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [firstName, setFirstName] = useState('');
+    const [lastName, setLastName] = useState('');
+    const [gender, setGender] = useState('male');
+    const [birthDay, setBirthDay] = useState('1');
+    const [birthMonth, setBirthMonth] = useState('فروردین');
+    const [birthYear, setBirthYear] = useState('1380');
+    const [error, setError] = useState('');
+    const [message, setMessage] = useState('');
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
+
+    const handleAuthAction = async (e) => {
+        e.preventDefault();
+        setError('');
+        setMessage('');
+
+        if (isForgotPassword) {
+            try {
+                await sendPasswordResetEmail(auth, email);
+                setMessage(translations.resetLinkSent);
+                setIsForgotPassword(false);
+            } catch (err) { setError(err.message); }
+            return;
+        }
+
+        if (isLogin) {
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+            } catch (err) { setError(err.message); }
+        } else {
+            if (!firstName || !lastName) {
+                setError("لطفا نام و نام خانوادگی را وارد کنید.");
+                return;
+            }
+            try {
+                const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCredential.user;
+                await setDoc(doc(db, "users", user.uid), {
+                    firstName,
+                    lastName,
+                    email: user.email,
+                    gender,
+                    dateOfBirth: { day: birthDay, month: birthMonth, year: birthYear },
+                    createdAt: new Date()
+                });
+            } catch (err) { setError(err.message); }
+        }
+    };
+
+    if (isForgotPassword) {
+        return (
+            <div className="auth-container">
+                <motion.div className="auth-form" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                    <h2 className="auth-title">{translations.resetPassword}</h2>
+                    <form onSubmit={handleAuthAction}>
+                        <input className="auth-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={translations.email} required />
+                        <button className="auth-button" type="submit">{translations.sendResetLink}</button>
+                    </form>
+                    {error && <p className="auth-error">{error}</p>}
+                    {message && <p className="auth-message">{message}</p>}
+                    <button className="auth-toggle-button" onClick={() => setIsForgotPassword(false)}>{translations.backToHome}</button>
+                </motion.div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="auth-container">
+            <motion.div className="auth-form" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+                <h2 className="auth-title">{isLogin ? translations.login : translations.createAccount}</h2>
+                <form onSubmit={handleAuthAction}>
+                    {!isLogin && (
+                        <>
+                            <div className="form-row">
+                                <input className="auth-input" type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder={translations.firstName} required />
+                                <input className="auth-input" type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder={translations.lastName} required />
+                            </div>
+                            <select className="auth-select" value={gender} onChange={(e) => setGender(e.target.value)}>
+                                <option value="male">{translations.male}</option>
+                                <option value="female">{translations.female}</option>
+                                <option value="other">{translations.other}</option>
+                            </select>
+                            <label className="auth-label">{translations.dateOfBirth}</label>
+                            <div className="dob-container">
+                                <select className="auth-select" value={birthDay} onChange={e => setBirthDay(e.target.value)}>{Array.from({length: 31}, (_, i) => i + 1).map(d => <option key={d} value={d}>{d}</option>)}</select>
+                                <select className="auth-select" value={birthMonth} onChange={e => setBirthMonth(e.target.value)}>{persianMonths.map(m => <option key={m} value={m}>{m}</option>)}</select>
+                                <select className="auth-select" value={birthYear} onChange={e => setBirthYear(e.target.value)}>{Array.from({length: 71}, (_, i) => 1403 - i).map(y => <option key={y} value={y}>{y}</option>)}</select>
+                            </div>
+                        </>
+                    )}
+                    <input className="auth-input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={translations.email} required />
+                    <input className="auth-input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={translations.password} required />
+                    <button className="auth-button" type="submit">{isLogin ? translations.login : translations.signup}</button>
+                </form>
+                {error && <p className="auth-error">{error}</p>}
+                <div className="auth-footer">
+                    <button className="auth-toggle-button" onClick={() => setIsLogin(!isLogin)}>
+                        {isLogin ? translations.dontHaveAccount + ' ' + translations.signup : translations.alreadyHaveAccount + ' ' + translations.login}
+                    </button>
+                    {isLogin && <button className="auth-toggle-button" onClick={() => setIsForgotPassword(true)}>{translations.forgotPassword}</button>}
+                </div>
+            </motion.div>
+        </div>
+    );
+};
+
+const CalendarGrid = memo(({ completedDates }) => {
+    const today = new Date();
+    const month = today.getMonth();
+    const year = today.getFullYear();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const completedDays = useMemo(() => new Set(
+      completedDates
+        .map(d => new Date(d))
+        .filter(d => d.getMonth() === month && d.getFullYear() === year)
+        .map(d => d.getDate())
+    ), [completedDates, month, year]);
+  
+    return (
+      <div className="calendar-grid">
+        {days.map(day => (
+          <div key={day} className={`calendar-day ${completedDays.has(day) ? 'completed' : ''}`}>
+            {day}
+          </div>
+        ))}
+      </div>
+    );
+});
+
+const ProfileScreen = ({ user, completedWorkouts, onLogout }) => {
+    const [userData, setUserData] = useState(null);
+    useEffect(() => {
+        if (user) {
+            const userDocRef = doc(db, "users", user.uid);
+            getDoc(userDocRef).then(docSnap => {
+                if (docSnap.exists()) setUserData(docSnap.data());
+            });
+        }
+    }, [user]);
+    const streak = useMemo(() => calculateStreak(completedWorkouts.map(w => w.date)), [completedWorkouts]);
+    const totalDays = useMemo(() => new Set(completedWorkouts.map(w => w.date.split('T')[0])).size, [completedWorkouts]);
+
+    return (
+        <motion.div className="screen-container" dir="rtl" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <div className="profile-header">
+                <h1 className="screen-title">{userData ? `${userData.firstName} ${userData.lastName}` : translations.profile}</h1>
+                <button onClick={onLogout} className="logout-button">{translations.logout}</button>
+            </div>
+            <h2 className="section-title">{translations.statistics}</h2>
+            <div className="stats-grid">
+                <div className="stat-card">
+                    <BarChart2 className="stat-icon" />
+                    <p className="stat-value">{streak}</p>
+                    <p className="stat-label">{translations.workoutStreak}</p>
+                </div>
+                <div className="stat-card">
+                    <CheckCircle className="stat-icon" />
+                    <p className="stat-value">{totalDays}</p>
+                    <p className="stat-label">{translations.totalWorkoutDays}</p>
+                </div>
+            </div>
+            <h2 className="section-title">{translations.monthlyCalendar}</h2>
+            <div className="calendar-container">
+                <CalendarGrid completedDates={completedWorkouts.map(w => w.date)} />
+            </div>
+        </motion.div>
+    );
+};
 
 const Timer = memo(({ initialTime = 90 }) => {
     const [time, setTime] = useState(initialTime);
@@ -128,15 +423,17 @@ const ExerciseCard = memo(({ exercise, index }) => {
                         </div>
                     </div>
                 </div>
-                <motion.div animate={{ rotate: isNotesVisible ? 90 : 0 }} transition={{ duration: 0.3 }}>
-                    <Info size={20} className="info-icon"/>
+                <motion.div animate={{ rotate: isNotesVisible ? 45 : 0 }} transition={{ duration: 0.3 }}>
+                    <Plus size={24} className="info-icon"/>
                 </motion.div>
             </div>
             <AnimatePresence>
                 {isNotesVisible && (
-                    <motion.div initial={{ height: 0, opacity: 0, marginTop: 0 }} animate={{ height: 'auto', opacity: 1, marginTop: '12px' }} exit={{ height: 0, opacity: 0, marginTop: 0 }} className="exercise-card-notes-container">
+                    <motion.div initial={{ height: 0, opacity: 0, marginTop: 0 }} animate={{ height: 'auto', opacity: 1, marginTop: '1rem' }} exit={{ height: 0, opacity: 0, marginTop: 0 }} className="exercise-card-notes-container">
                         <div className="exercise-card-notes">
-                            <p>{exercise.notes}</p>
+                            {exercise.englishName && <p className="exercise-english-name">{exercise.englishName}</p>}
+                            {exercise.howTo && <p className="exercise-how-to"><strong>چگونه:</strong> {exercise.howTo}</p>}
+                            {exercise.notes && <p className="exercise-notes-tip"><strong>نکته:</strong> {exercise.notes}</p>}
                         </div>
                     </motion.div>
                 )}
@@ -145,18 +442,16 @@ const ExerciseCard = memo(({ exercise, index }) => {
     );
 });
 
-const WorkoutScreen = ({ workoutId, onBack, userId, completedWorkouts, setCompletedWorkouts }) => {
+const WorkoutScreen = ({ workoutId, onBack, userId }) => {
     const workout = workoutData[workoutId];
-    const date = new Date().toISOString().slice(0, 10);
-    const isCompleted = completedWorkouts.includes(`${workoutId}-${date}`);
     
     const handleComplete = async () => {
         if (!userId) return;
-        const workoutDocId = `${workoutId}-${date}`;
+        const date = new Date();
+        const workoutDocId = `${workoutId}-${date.toISOString().slice(0, 10)}`;
         const docRef = doc(db, "users", userId, "completedWorkouts", workoutDocId);
         try {
-            await setDoc(docRef, { workoutId, date, completedAt: new Date() });
-            setCompletedWorkouts(prev => [...prev, workoutDocId]);
+            await setDoc(docRef, { workoutId, date: date.toISOString(), completedAt: date });
         } catch (error) { console.error("Error saving completion:", error); }
     };
     
@@ -178,18 +473,11 @@ const WorkoutScreen = ({ workoutId, onBack, userId, completedWorkouts, setComple
                 <motion.button whileTap={{ scale: 0.9 }} onClick={onBack} className="back-button"><ArrowLeft /></motion.button>
             </motion.div>
             <motion.div variants={containerVariants} initial="hidden" animate="visible">
-                {workout.exercises.map((ex, index) => <ExerciseCard key={index} exercise={ex} index={index} />)}
+                <h3 className="section-title">{translations.importantNotes}</h3>
+                {workout.exercises.map((ex, index) => <ExerciseCard key={ex.name} exercise={ex} index={index} />)}
                 <Timer initialTime={90} />
                 <motion.div className="completion-section" variants={itemVariants}>
-                    {isCompleted ? (
-                        <div className="completion-message">
-                             <motion.div initial={{ scale: 0 }} animate={{ scale: 1, transition: { delay: 0.2, type: 'spring' } }}><CheckCircle size={48} className="completion-icon" /></motion.div>
-                             <h2 className="completion-title">{translations.greatJob}</h2>
-                             <p className="completion-subtitle">{translations.sessionCompleted}</p>
-                        </div>
-                    ) : (
-                        <motion.button onClick={handleComplete} whileHover={{ scale: 1.05, boxShadow: "0px 0px 20px rgba(34, 211, 238, 0.5)" }} whileTap={{ scale: 0.98 }} className="main-action-button">{translations.markAsDone}</motion.button>
-                    )}
+                    <motion.button onClick={handleComplete} whileHover={{ scale: 1.05, boxShadow: "0px 0px 20px rgba(34, 211, 238, 0.5)" }} whileTap={{ scale: 0.98 }} className="main-action-button">{translations.markAsDone}</motion.button>
                 </motion.div>
             </motion.div>
         </motion.div>
@@ -209,7 +497,7 @@ const HomeScreen = ({ onSelectWorkout, completedWorkouts }) => {
                     const workout = workoutData[day];
                     const isRestDay = day === 'rest';
                     const dayNumber = index + 1;
-                    const isCompleted = completedWorkouts.some(cw => cw.startsWith(day));
+                    const isCompleted = completedWorkouts.some(cw => cw.workoutId === day && cw.date.startsWith(new Date().toISOString().slice(0, 10)));
                     return (
                         <motion.div key={index} className={`day-card ${isRestDay ? 'rest-day' : ''}`} onClick={!isRestDay ? () => onSelectWorkout(day) : undefined} variants={itemVariants} whileHover={!isRestDay ? { scale: 1.03, y: -5 } : {}}>
                             {!isRestDay && <div className="day-card-glow"></div>}
@@ -241,357 +529,77 @@ const HomeScreen = ({ onSelectWorkout, completedWorkouts }) => {
     );
 };
 
-export default function App() {
-    const [currentScreen, setCurrentScreen] = useState('home');
+const MainApp = ({ user, completedWorkouts, onLogout }) => {
+    const [page, setPage] = useState('home');
     const [selectedWorkout, setSelectedWorkout] = useState(null);
-    const [userId, setUserId] = useState(null);
+    const handleSelectWorkout = (workoutId) => { setSelectedWorkout(workoutId); setPage('workout'); };
+    const handleBackToHome = () => { setPage('home'); setSelectedWorkout(null); };
+
+    return (
+        <div className="main-app-wrapper">
+            <div className="main-content">
+                <AnimatePresence mode="wait">
+                    {page === 'home' && <HomeScreen key="home" onSelectWorkout={handleSelectWorkout} completedWorkouts={completedWorkouts} />}
+                    {page === 'workout' && <WorkoutScreen key="workout" workoutId={selectedWorkout} onBack={handleBackToHome} userId={user.uid} />}
+                    {page === 'profile' && <ProfileScreen key="profile" user={user} completedWorkouts={completedWorkouts} onLogout={onLogout} />}
+                </AnimatePresence>
+            </div>
+            <nav className="bottom-nav">
+                <button onClick={() => setPage('home')} className={`nav-button ${page === 'home' || page === 'workout' ? 'active' : ''}`}><Home /><span>{translations.home}</span></button>
+                <button onClick={() => setPage('profile')} className={`nav-button ${page === 'profile' ? 'active' : ''}`}><User /><span>{translations.profile}</span></button>
+            </nav>
+        </div>
+    );
+};
+
+export default function App() {
+    const [user, setUser] = useState(null);
+    const [authStatus, setAuthStatus] = useState('loading');
     const [completedWorkouts, setCompletedWorkouts] = useState([]);
-    const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const auth = getAuth();
-        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-            if (user) { setUserId(user.uid); } 
-            else {
-                try {
-                     if (typeof __initial_auth_token !== 'undefined') { await signInWithCustomToken(auth, __initial_auth_token); } 
-                     else { await signInAnonymously(auth); }
-                } catch (error) { console.error("Sign-in failed:", error); setIsLoading(false); }
+        const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
+            if (currentUser) {
+                setUser(currentUser);
+                setAuthStatus('authed');
+            } else {
+                setUser(null);
+                setAuthStatus('unauthed');
             }
         });
         return () => unsubscribeAuth();
     }, []);
 
     useEffect(() => {
-        if (!userId) { setIsLoading(false); return; }
-        setIsLoading(true);
-        const q = query(collection(db, "users", userId, "completedWorkouts"));
-        const unsubscribeFirestore = onSnapshot(q, (querySnapshot) => {
-            const workouts = [];
-            querySnapshot.forEach((doc) => { workouts.push(doc.id); });
-            setCompletedWorkouts(workouts);
-            setIsLoading(false);
-        }, (error) => { console.error("Error fetching workouts:", error); setIsLoading(false); });
-        return () => unsubscribeFirestore();
-    }, [userId]);
+        if (user) {
+            const q = query(collection(db, "users", user.uid, "completedWorkouts"));
+            const unsubscribeFirestore = onSnapshot(q, (querySnapshot) => {
+                const workouts = [];
+                querySnapshot.forEach((doc) => {
+                    workouts.push({ id: doc.id, ...doc.data() });
+                });
+                setCompletedWorkouts(workouts);
+            }, (error) => {
+                console.error("Error fetching workouts:", error);
+            });
+            return () => unsubscribeFirestore();
+        } else {
+            setCompletedWorkouts([]);
+        }
+    }, [user]);
 
-    const handleSelectWorkout = (workoutId) => { setSelectedWorkout(workoutId); setCurrentScreen('workout'); };
-    const handleBackToHome = () => { setCurrentScreen('home'); setSelectedWorkout(null); };
-
-    if (isLoading) {
-        return (
-            <div className="loading-screen">
-                <div className="loading-content">
-                    <motion.div animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0], color: ["#22d3ee", "#67e8f9", "#22d3ee"] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}>
-                       <Flame size={60} />
-                    </motion.div>
-                    <p className="loading-text">{translations.loading}</p>
-                </div>
-            </div>
-        )
-    }
+    const handleLogout = () => {
+        signOut(auth);
+    };
 
     return (
         <main className="app-main">
-            {/* CSS Styles are now embedded here */}
-            <style>{`
-                /* General Styles & Font */
-                @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700&display=swap');
-
-                :root {
-                  --bg-color: #111827;
-                  --card-bg-color: rgba(31, 41, 55, 0.6);
-                  --border-color: #374151;
-                  --text-color: #e5e7eb;
-                  --text-color-light: #9ca3af;
-                  --primary-color: #22d3ee;
-                  --primary-color-dark: #0e7490;
-                  --green-color: #22c55e;
-                  --yellow-color: #eab308;
-                  --red-color: #ef4444;
-                }
-
-                * {
-                    box-sizing: border-box;
-                }
-
-                body {
-                  margin: 0;
-                  font-family: 'Vazirmatn', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-                    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-                    sans-serif;
-                  -webkit-font-smoothing: antialiased;
-                  -moz-osx-font-smoothing: grayscale;
-                  background-color: var(--bg-color);
-                  color: var(--text-color);
-                }
-
-                /* App Layout & Background */
-                .app-main {
-                  min-height: 100vh;
-                  overflow-x: hidden;
-                }
-
-                .animated-background {
-                  position: fixed;
-                  top: 0;
-                  left: 0;
-                  width: 100%;
-                  height: 100%;
-                  z-index: 0;
-                  background: radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.1), transparent 30%),
-                              radial-gradient(circle at 80% 70%, rgba(59, 130, 246, 0.1), transparent 30%);
-                  animation: move-glow 20s linear infinite;
-                }
-
-                @keyframes move-glow {
-                  0% { background-position: 0% 50%; }
-                  50% { background-position: 100% 50%; }
-                  100% { background-position: 0% 50%; }
-                }
-
-                .app-container {
-                  position: relative;
-                  z-index: 1;
-                  max-width: 672px;
-                  margin: 0 auto;
-                  padding: 0 1rem; /* Added horizontal padding for smaller screens */
-                }
-
-                .screen-container {
-                  padding: 1.5rem 0; /* Changed padding to vertical only */
-                  min-height: 100vh;
-                }
-
-                /* Loading Screen */
-                .loading-screen {
-                  display: flex;
-                  align-items: center;
-                  justify-content: center;
-                  min-height: 100vh;
-                }
-                .loading-content {
-                  text-align: center;
-                }
-                .loading-text {
-                  margin-top: 1rem;
-                  font-size: 1.25rem;
-                  letter-spacing: 0.1em;
-                }
-
-                /* Home Screen */
-                .home-header {
-                  text-align: center;
-                  margin-bottom: 2.5rem;
-                }
-                .app-title {
-                  font-size: 2.5rem; /* Reduced font size */
-                  font-weight: 700;
-                  background-image: linear-gradient(to right, #22d3ee, #3b82f6);
-                  -webkit-background-clip: text;
-                  background-clip: text;
-                  color: transparent;
-                }
-                .app-subtitle {
-                  color: var(--text-color-light);
-                  font-size: 1.125rem;
-                  margin-top: 0.5rem;
-                }
-                .section-title {
-                  font-size: 1.25rem;
-                  font-weight: 700;
-                  margin-bottom: 1rem;
-                }
-                .weekly-grid {
-                  display: grid;
-                  grid-template-columns: 1fr; /* Mobile first: one column */
-                  gap: 1rem; /* Reduced gap for mobile */
-                }
-                @media (min-width: 640px) {
-                  .weekly-grid {
-                    grid-template-columns: repeat(2, 1fr);
-                    gap: 1.25rem;
-                  }
-                  .app-title {
-                     font-size: 3rem;
-                  }
-                }
-
-                /* Day Card */
-                .day-card {
-                  position: relative;
-                  display: flex;
-                  flex-direction: column;
-                  height: 100%;
-                  padding: 1rem; /* Reduced padding for mobile */
-                  border-radius: 1rem;
-                  border: 1px solid var(--border-color);
-                  transition: all 0.3s ease;
-                  background-color: var(--card-bg-color);
-                  backdrop-filter: blur(4px);
-                  cursor: pointer;
-                }
-                .day-card.rest-day {
-                  cursor: default;
-                  background-color: #1f2937;
-                }
-                .day-card:not(.rest-day):hover {
-                  border-color: var(--primary-color);
-                }
-                .day-card-glow {
-                  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                  background-color: rgba(34, 211, 238, 0.2);
-                  border-radius: 1rem; filter: blur(1.5rem);
-                  opacity: 0; transition: opacity 0.3s ease;
-                }
-                .day-card:hover .day-card-glow { opacity: 1; }
-                .day-card-content { position: relative; flex-grow: 1; }
-                .day-card-info { display: flex; align-items: center; }
-                .day-card-icon-wrapper {
-                  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-                  width: 2.5rem; height: 2.5rem; /* Smaller icon wrapper for mobile */
-                  border-radius: 0.75rem; margin-left: 0.75rem;
-                  background-color: rgba(14, 116, 144, 0.5);
-                  color: var(--primary-color);
-                }
-                .day-card-icon-wrapper.rest-icon { background-color: #374151; color: var(--text-color-light); }
-                .day-card-day-number { color: var(--text-color-light); font-size: 0.875rem; }
-                .day-card-name {
-                  font-weight: 700; font-size: 1.125rem; /* Reduced font size */
-                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-                }
-                .day-card-completed-icon { position: absolute; top: 0; left: 0; color: var(--green-color); }
-                .day-card-button-container { margin-top: 1rem; height: 42px; display: flex; align-items: flex-end; }
-                .day-card-button {
-                  width: 100%; background-color: #374151; color: var(--primary-color);
-                  font-weight: 600; padding: 0.625rem 0; border-radius: 0.5rem;
-                  border: 1px solid #4b5563; transition: all 0.3s ease; cursor: pointer;
-                }
-                .day-card:hover .day-card-button { background-color: var(--primary-color); color: var(--bg-color); border-color: var(--primary-color); }
-
-                /* Workout Screen */
-                .workout-header {
-                  display: flex;
-                  align-items: center;
-                  justify-content: space-between;
-                  margin-bottom: 2rem;
-                }
-                .workout-header-title-group { display: flex; align-items: center; min-width: 0; }
-                .workout-header-icon-wrapper {
-                  flex-shrink: 0; padding: 0.75rem; background-color: #1f2937;
-                  border-radius: 9999px; margin-right: 1rem; color: var(--primary-color);
-                }
-                .screen-title {
-                  font-size: 1.5rem; /* Reduced font size */
-                  font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-                }
-                .workout-target {
-                  display: flex; align-items: center; margin-top: 0.25rem;
-                  color: var(--text-color-light); white-space: nowrap;
-                  overflow: hidden; text-overflow: ellipsis;
-                }
-                .back-button {
-                  flex-shrink: 0; padding: 0.75rem; background-color: #374151;
-                  border-radius: 9999px; transition: background-color 0.3s;
-                  border: none; color: white; cursor: pointer;
-                }
-                .back-button:hover { background-color: #4b5563; }
-
-                /* Exercise Card */
-                .exercise-card {
-                  background-color: var(--card-bg-color); backdrop-filter: blur(4px);
-                  border-radius: 1rem; padding: 1rem; margin-bottom: 1rem;
-                  border: 1px solid var(--border-color); overflow: hidden;
-                }
-                .exercise-card-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; }
-                .exercise-card-title-group { display: flex; align-items: center; min-width: 0; }
-                .exercise-card-index {
-                  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-                  width: 2.5rem; height: 2.5rem; background-color: #374151;
-                  color: var(--primary-color); font-weight: 700; font-size: 1.25rem;
-                  border-radius: 9999px; margin-left: 1rem;
-                }
-                .exercise-card-name-group { min-width: 0; }
-                .exercise-card-name {
-                  font-weight: 700; font-size: 1.125rem;
-                  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-                }
-                .exercise-card-details {
-                  display: flex; align-items: center; flex-wrap: wrap;
-                  color: var(--text-color-light); font-size: 0.875rem; margin-top: 0.25rem;
-                }
-                .exercise-card-detail-item { display: flex; align-items: center; margin-left: 1rem; }
-                .icon { margin-right: 0.25rem; color: var(--primary-color); }
-                .info-icon { color: var(--text-color-light); transition: color 0.3s; }
-                .exercise-card-header:hover .info-icon { color: white; }
-                .exercise-card-notes-container { overflow: hidden; }
-                .exercise-card-notes {
-                  padding-top: 0.75rem; border-top: 1px solid var(--border-color);
-                  font-size: 0.875rem; color: var(--text-color); white-space: pre-wrap;
-                }
-
-                /* Timer */
-                .timer-container {
-                  width: 100%; max-width: 24rem; margin: 2rem auto 0 auto;
-                  padding: 1.5rem; background-color: var(--card-bg-color);
-                  backdrop-filter: blur(4px); border-radius: 1.5rem;
-                  border: 1px solid var(--border-color); text-align: center;
-                }
-                .timer-title {
-                  font-size: 1.25rem; font-weight: 700;
-                  color: var(--primary-color); margin-bottom: 1rem;
-                }
-                .timer-circle-container {
-                  position: relative; width: 10rem; height: 10rem; /* Smaller timer on mobile */
-                  margin: 0 auto; display: flex; align-items: center; justify-content: center;
-                }
-                .timer-svg { position: absolute; width: 100%; height: 100%; transform: rotate(-90deg); }
-                .timer-bg-circle { stroke: #374151; stroke-width: 8; fill: transparent; }
-                .timer-progress-circle { stroke: var(--primary-color); stroke-width: 8; fill: transparent; stroke-linecap: round; }
-                .timer-display { display: flex; align-items: center; justify-content: center; z-index: 10; }
-                .timer-text { font-family: 'Courier New', Courier, monospace; font-size: 2.5rem; letter-spacing: 0.05em; }
-                .timer-controls { display: flex; justify-content: center; align-items: center; gap: 0.75rem; margin-top: 1.5rem; }
-                .timer-adjust-btn {
-                  padding: 0.75rem; background-color: #374151; border-radius: 9999px;
-                  border: none; color: white; cursor: pointer; transition: background-color 0.3s;
-                }
-                .timer-adjust-btn:hover { background-color: var(--primary-color); }
-                .timer-main-btn {
-                  padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-size: 1rem;
-                  font-weight: 700; transition: all 0.3s; border: none; cursor: pointer;
-                }
-                .timer-start-btn { background-color: var(--green-color); color: white; }
-                .timer-start-btn:hover { background-color: #16a34a; }
-                .timer-pause-btn { background-color: var(--yellow-color); color: white; }
-                .timer-pause-btn:hover { background-color: #ca8a04; }
-                .timer-reset-btn { background-color: var(--red-color); color: white; }
-                .timer-reset-btn:hover { background-color: #dc2626; }
-
-                /* Completion Section */
-                .completion-section { margin-top: 2rem; text-align: center; }
-                .main-action-button {
-                  width: 100%; padding: 1rem 0; background-color: var(--primary-color);
-                  color: #1f2937; font-weight: 700; font-size: 1.125rem;
-                  border-radius: 1rem; transition: all 0.3s; border: none; cursor: pointer;
-                }
-                .main-action-button:hover {
-                  transform: scale(1.05);
-                  box-shadow: 0px 0px 20px rgba(34, 211, 238, 0.5);
-                }
-                .completion-message {
-                  display: flex; flex-direction: column; align-items: center; justify-content: center;
-                  padding: 1.5rem; background-color: rgba(34, 197, 94, 0.1);
-                  border: 1px solid var(--green-color); border-radius: 1rem;
-                }
-                .completion-icon { color: var(--green-color); margin-bottom: 0.75rem; }
-                .completion-title { font-size: 1.5rem; font-weight: 700; }
-                .completion-subtitle { color: #86efac; }
-            `}</style>
-             <div className="animated-background"></div>
+            <div className="animated-background"></div>
             <div className="app-container">
                 <AnimatePresence mode="wait">
-                    {currentScreen === 'home' && <HomeScreen key="home" onSelectWorkout={handleSelectWorkout} completedWorkouts={completedWorkouts} />}
-                    {currentScreen === 'workout' && <WorkoutScreen key="workout" workoutId={selectedWorkout} onBack={handleBackToHome} userId={userId} completedWorkouts={completedWorkouts} setCompletedWorkouts={setCompletedWorkouts}/>}
+                    {authStatus === 'loading' && <div className="loading-screen"><div className="loading-content"><Flame size={60} /><p className="loading-text">{translations.loading}</p></div></div>}
+                    {authStatus === 'unauthed' && <AuthPage />}
+                    {authStatus === 'authed' && <MainApp user={user} completedWorkouts={completedWorkouts} onLogout={handleLogout} />}
                 </AnimatePresence>
             </div>
         </main>
