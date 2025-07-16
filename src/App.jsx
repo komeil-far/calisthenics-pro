@@ -20,8 +20,9 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
     Clock, Dumbbell, Zap, Target, CheckCircle, Repeat, Flame, Plus, Minus, Info, ArrowLeft,
-    Home, User, BarChart2
+    Home, User, BarChart2, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import jalali_moment from 'jalali-moment';
 import './App.css';
 
 // --- Farsi (Persian) Translations ---
@@ -233,7 +234,7 @@ const AuthPage = () => {
                     email: user.email,
                     gender,
                     dateOfBirth: { day: birthDay, month: birthMonth, year: birthYear },
-                    createdAt: new Date()
+                    createdAt: new Date().toISOString()
                 });
             } catch (err) { setError(err.message); }
         }
@@ -296,21 +297,28 @@ const AuthPage = () => {
     );
 };
 
-const CalendarGrid = memo(({ completedDates }) => {
-    const today = new Date();
-    const month = today.getMonth();
-    const year = today.getFullYear();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+const CalendarGrid = memo(({ completedDates, displayDate }) => {
+    const moment = jalali_moment(displayDate).locale('fa');
+    const month = moment.jMonth();
+    const year = moment.jYear();
+    
+    const daysInMonth = moment.jDaysInMonth();
+    const firstDayOfMonth = moment.startOf('jMonth').day(); // 0 (Sun) - 6 (Sat)
+    const jalaliFirstDay = (firstDayOfMonth + 1) % 7; // 0 (Sat) - 6 (Fri)
+
     const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+    const emptyDays = Array.from({ length: jalaliFirstDay });
+
     const completedDays = useMemo(() => new Set(
       completedDates
-        .map(d => new Date(d))
-        .filter(d => d.getMonth() === month && d.getFullYear() === year)
-        .map(d => d.getDate())
+        .map(d => jalali_moment(d))
+        .filter(d => d.jMonth() === month && d.jYear() === year)
+        .map(d => d.jDate())
     ), [completedDates, month, year]);
   
     return (
       <div className="calendar-grid">
+        {emptyDays.map((_, i) => <div key={`empty-${i}`} className="calendar-day empty"></div>)}
         {days.map(day => (
           <div key={day} className={`calendar-day ${completedDays.has(day) ? 'completed' : ''}`}>
             {day}
@@ -322,16 +330,38 @@ const CalendarGrid = memo(({ completedDates }) => {
 
 const ProfileScreen = ({ user, completedWorkouts, onLogout }) => {
     const [userData, setUserData] = useState(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [displayDate, setDisplayDate] = useState(new Date());
+
     useEffect(() => {
         if (user) {
             const userDocRef = doc(db, "users", user.uid);
             getDoc(userDocRef).then(docSnap => {
                 if (docSnap.exists()) setUserData(docSnap.data());
+                setIsLoading(false);
             });
         }
     }, [user]);
+
     const streak = useMemo(() => calculateStreak(completedWorkouts.map(w => w.date)), [completedWorkouts]);
     const totalDays = useMemo(() => new Set(completedWorkouts.map(w => w.date.split('T')[0])).size, [completedWorkouts]);
+
+    const accountCreationMoment = useMemo(() => userData ? jalali_moment(userData.createdAt) : null, [userData]);
+    const displayMoment = jalali_moment(displayDate);
+
+    const canGoToPrev = accountCreationMoment ? displayMoment.clone().subtract(1, 'jMonth').isSameOrAfter(accountCreationMoment, 'jMonth') : false;
+    const canGoToNext = !displayMoment.isSame(new Date(), 'jMonth');
+
+    const goToPrevMonth = () => {
+        if (canGoToPrev) setDisplayDate(displayMoment.clone().subtract(1, 'jMonth').toDate());
+    };
+    const goToNextMonth = () => {
+        if (canGoToNext) setDisplayDate(displayMoment.clone().add(1, 'jMonth').toDate());
+    };
+    
+    if (isLoading) {
+        return <div className="loading-screen"><div className="loading-content"><Flame size={60} /></div></div>;
+    }
 
     return (
         <motion.div className="screen-container" dir="rtl" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -339,6 +369,7 @@ const ProfileScreen = ({ user, completedWorkouts, onLogout }) => {
                 <h1 className="screen-title">{userData ? `${userData.firstName} ${userData.lastName}` : translations.profile}</h1>
                 <button onClick={onLogout} className="logout-button">{translations.logout}</button>
             </div>
+            
             <h2 className="section-title">{translations.statistics}</h2>
             <div className="stats-grid">
                 <div className="stat-card">
@@ -352,9 +383,15 @@ const ProfileScreen = ({ user, completedWorkouts, onLogout }) => {
                     <p className="stat-label">{translations.totalWorkoutDays}</p>
                 </div>
             </div>
+
             <h2 className="section-title">{translations.monthlyCalendar}</h2>
             <div className="calendar-container">
-                <CalendarGrid completedDates={completedWorkouts.map(w => w.date)} />
+                <div className="calendar-header">
+                    <button onClick={goToPrevMonth} disabled={!canGoToPrev} className="calendar-nav-button"><ChevronRight /></button>
+                    <span className="calendar-title">{displayMoment.locale('fa').format('jMMMM jYYYY')}</span>
+                    <button onClick={goToNextMonth} disabled={!canGoToNext} className="calendar-nav-button"><ChevronLeft /></button>
+                </div>
+                <CalendarGrid completedDates={completedWorkouts.map(w => w.date)} displayDate={displayDate} />
             </div>
         </motion.div>
     );
@@ -452,6 +489,7 @@ const WorkoutScreen = ({ workoutId, onBack, userId }) => {
         const docRef = doc(db, "users", userId, "completedWorkouts", workoutDocId);
         try {
             await setDoc(docRef, { workoutId, date: date.toISOString(), completedAt: date });
+            onBack(); // FIX: Redirect to home after completion
         } catch (error) { console.error("Error saving completion:", error); }
     };
     
@@ -529,33 +567,12 @@ const HomeScreen = ({ onSelectWorkout, completedWorkouts }) => {
     );
 };
 
-const MainApp = ({ user, completedWorkouts, onLogout }) => {
-    const [page, setPage] = useState('home');
-    const [selectedWorkout, setSelectedWorkout] = useState(null);
-    const handleSelectWorkout = (workoutId) => { setSelectedWorkout(workoutId); setPage('workout'); };
-    const handleBackToHome = () => { setPage('home'); setSelectedWorkout(null); };
-
-    return (
-        <div className="main-app-wrapper">
-            <div className="main-content">
-                <AnimatePresence mode="wait">
-                    {page === 'home' && <HomeScreen key="home" onSelectWorkout={handleSelectWorkout} completedWorkouts={completedWorkouts} />}
-                    {page === 'workout' && <WorkoutScreen key="workout" workoutId={selectedWorkout} onBack={handleBackToHome} userId={user.uid} />}
-                    {page === 'profile' && <ProfileScreen key="profile" user={user} completedWorkouts={completedWorkouts} onLogout={onLogout} />}
-                </AnimatePresence>
-            </div>
-            <nav className="bottom-nav">
-                <button onClick={() => setPage('home')} className={`nav-button ${page === 'home' || page === 'workout' ? 'active' : ''}`}><Home /><span>{translations.home}</span></button>
-                <button onClick={() => setPage('profile')} className={`nav-button ${page === 'profile' ? 'active' : ''}`}><User /><span>{translations.profile}</span></button>
-            </nav>
-        </div>
-    );
-};
-
 export default function App() {
     const [user, setUser] = useState(null);
     const [authStatus, setAuthStatus] = useState('loading');
     const [completedWorkouts, setCompletedWorkouts] = useState([]);
+    const [page, setPage] = useState('home');
+    const [selectedWorkout, setSelectedWorkout] = useState(null);
 
     useEffect(() => {
         const unsubscribeAuth = onAuthStateChanged(auth, (currentUser) => {
@@ -565,42 +582,76 @@ export default function App() {
             } else {
                 setUser(null);
                 setAuthStatus('unauthed');
+                setPage('home'); // Reset to home on logout
             }
         });
         return () => unsubscribeAuth();
     }, []);
 
     useEffect(() => {
-        if (user) {
-            const q = query(collection(db, "users", user.uid, "completedWorkouts"));
-            const unsubscribeFirestore = onSnapshot(q, (querySnapshot) => {
-                const workouts = [];
-                querySnapshot.forEach((doc) => {
-                    workouts.push({ id: doc.id, ...doc.data() });
-                });
-                setCompletedWorkouts(workouts);
-            }, (error) => {
-                console.error("Error fetching workouts:", error);
-            });
-            return () => unsubscribeFirestore();
-        } else {
+        if (!user) {
             setCompletedWorkouts([]);
+            return;
         }
+        const q = query(collection(db, "users", user.uid, "completedWorkouts"));
+        const unsubscribeFirestore = onSnapshot(q, (querySnapshot) => {
+            const workouts = [];
+            querySnapshot.forEach((doc) => {
+                workouts.push({ id: doc.id, ...doc.data() });
+            });
+            setCompletedWorkouts(workouts);
+        }, (error) => {
+            console.error("Error fetching workouts:", error);
+        });
+        return () => unsubscribeFirestore();
     }, [user]);
 
     const handleLogout = () => {
         signOut(auth);
     };
 
+    const handleSelectWorkout = (workoutId) => {
+        setSelectedWorkout(workoutId);
+        setPage('workout');
+    };
+    
+    const handleBackToHome = () => {
+        setPage('home');
+        setSelectedWorkout(null);
+    };
+
+    const renderContent = () => {
+        if (authStatus === 'loading') {
+            return <div className="loading-screen"><div className="loading-content"><Flame size={60} /><p className="loading-text">{translations.loading}</p></div></div>;
+        }
+        if (authStatus === 'unauthed') {
+            return <AuthPage />;
+        }
+        if (authStatus === 'authed' && user) {
+            return (
+                <div className="main-app-wrapper">
+                    <div className="main-content">
+                        <AnimatePresence mode="wait">
+                            {page === 'home' && <HomeScreen key="home" onSelectWorkout={handleSelectWorkout} completedWorkouts={completedWorkouts} />}
+                            {page === 'workout' && <WorkoutScreen key="workout" workoutId={selectedWorkout} onBack={handleBackToHome} userId={user.uid} />}
+                            {page === 'profile' && <ProfileScreen key="profile" user={user} completedWorkouts={completedWorkouts} onLogout={handleLogout} />}
+                        </AnimatePresence>
+                    </div>
+                    <nav className="bottom-nav">
+                        <button onClick={() => setPage('home')} className={`nav-button ${page === 'home' || page === 'workout' ? 'active' : ''}`}><Home /><span>{translations.home}</span></button>
+                        <button onClick={() => setPage('profile')} className={`nav-button ${page === 'profile' ? 'active' : ''}`}><User /><span>{translations.profile}</span></button>
+                    </nav>
+                </div>
+            );
+        }
+        return <AuthPage />; // Fallback
+    };
+
     return (
         <main className="app-main">
             <div className="animated-background"></div>
             <div className="app-container">
-                <AnimatePresence mode="wait">
-                    {authStatus === 'loading' && <div className="loading-screen"><div className="loading-content"><Flame size={60} /><p className="loading-text">{translations.loading}</p></div></div>}
-                    {authStatus === 'unauthed' && <AuthPage />}
-                    {authStatus === 'authed' && <MainApp user={user} completedWorkouts={completedWorkouts} onLogout={handleLogout} />}
-                </AnimatePresence>
+                {renderContent()}
             </div>
         </main>
     );

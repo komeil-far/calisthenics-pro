@@ -116,20 +116,32 @@ body {
   margin-bottom: 1rem;
   font-size: 1rem;
   font-family: 'Vazirmatn', sans-serif;
+  text-align: center; /* Centered placeholder and text */
 }
 
 .auth-input::placeholder {
   color: var(--text-color-light);
+  text-align: center;
+}
+
+.auth-label {
+    display: block;
+    text-align: right;
+    font-size: 0.9rem;
+    color: var(--text-color-light);
+    margin-bottom: 0.5rem;
 }
 
 .dob-container {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 2fr 1.5fr;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
 
 .dob-container .auth-select {
   margin-bottom: 0;
+  padding: 0.75rem 0.25rem;
 }
 
 .auth-button {
@@ -177,7 +189,7 @@ body {
 
 /* Main App Wrapper */
 .main-app-wrapper {
-  padding-bottom: 80px; /* Space for bottom nav */
+  padding-bottom: 80px;
 }
 
 .bottom-nav {
@@ -274,6 +286,31 @@ body {
   border-radius: 1rem;
 }
 
+.calendar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.calendar-nav-button {
+    background: none;
+    border: none;
+    color: var(--primary-color);
+    cursor: pointer;
+    padding: 0.5rem;
+}
+
+.calendar-nav-button:disabled {
+    color: var(--border-color);
+    cursor: not-allowed;
+}
+
+.calendar-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
@@ -289,6 +326,11 @@ body {
   background: #374151;
   border-radius: 0.25rem;
   font-size: 0.8rem;
+  color: var(--text-color-light);
+}
+
+.calendar-day.empty {
+    background: transparent;
 }
 
 .calendar-day.completed {
@@ -349,7 +391,7 @@ body {
 .timer-bg-circle { stroke: #374151; stroke-width: 8; fill: transparent; }
 .timer-progress-circle { stroke: var(--primary-color); stroke-width: 8; fill: transparent; stroke-linecap: round; }
 .timer-display { display: flex; align-items: center; justify-content: center; z-index: 10; }
-.timer-text { font-family: 'Courier New', Courier, monospace; font-size: 2.5rem; letter-spacing: 0.05em; }
+.timer-text { font-family: 'Courier New', Courier, monospace; font-size: 2.2rem; letter-spacing: 0.05em; } /* Smaller font size */
 .timer-controls { display: flex; justify-content: center; align-items: center; gap: 0.75rem; margin-top: 1.5rem; }
 .timer-adjust-btn { padding: 0.75rem; background-color: #374151; border-radius: 9999px; border: none; color: white; cursor: pointer; transition: background-color 0.3s; }
 .timer-adjust-btn:hover { background-color: var(--primary-color); }
